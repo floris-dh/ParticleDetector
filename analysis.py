@@ -10,7 +10,7 @@ start_time = time.time()
 def import_data(file_path):
     # Assuming the data is in CSV format with columns: Time, Voltage
     data = pd.read_csv(file_path, skiprows=9)
-    return data["Time (s)"], data["Channel 1 (V)"]
+    return data.iloc[:, 0], data.iloc[:, 1]
 
 
 i = "0001"
