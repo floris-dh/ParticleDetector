@@ -116,4 +116,7 @@ dependencies:
   - xorg-libxdmcp=1.1.5=hba3369d_1
   - zlib-ng=2.3.3=h0261ad2_1
   - zstd=1.5.7=h534d264_6
+  - pip:
+      - dwfpy==1.2.0
+      - scipy==1.17.1
 prefix: C:\Users\flori\miniforge3\envs\ParticleDetector
