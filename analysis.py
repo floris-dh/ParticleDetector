@@ -10,7 +10,7 @@ start_time = time.time()
 
 def import_data(file_path):
     # Assuming the data is in CSV format with columns: Time, Voltage
-    data = pd.read_csv(file_path, skiprows=9)
+    data = pd.read_csv(file_path, skiprows=14, sep=",")
     return data.iloc[:, 0], data.iloc[:, 1]
 
 
@@ -18,23 +18,31 @@ i = "0001"
 
 integral_list = []
 
-while os.path.exists(f"Data/acq{i}.csv"):
-    times, voltage = import_data(f"Data/acq{i}.csv")
+while True:
+    path = "Data/"
+    file_name = f"m1_{i}.csv"
+    
+    try:
+        if os.path.exists(path + file_name):
+            times, voltage = import_data(path + file_name)
 
-    integral = np.trapezoid(voltage, times)
+            integral = np.trapezoid(voltage, times)
 
-    print(f"Integral for acq{i}.csv: {integral:.4f}", end="\r")
+            print(f"Integral for {file_name}: {integral:.4f}", end="\r")
 
-    i = str(int(i) + 1).zfill(4)
+            i = str(int(i) + 1).zfill(4)
 
-    integral_list.append(integral)
+            integral_list.append(integral)
 
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(times, voltage)
-    # plt.title(f"Voltage vs Time for acq{i}.csv")
-    # plt.xlabel("Time (s)")
-    # plt.ylabel("Voltage (V)")
-    # plt.savefig(f"Figures/acq/acq{i}.png")
+            plt.figure(figsize=(10, 6))
+            plt.plot(times, voltage)
+            plt.title(f"Voltage vs Time for {file_name}")
+            plt.xlabel("Time (s)")
+            plt.ylabel("Voltage (V)")
+            plt.savefig(f"Figures/m_1/{file_name}.png")
+    except KeyboardInterrupt:
+        print("\nProcess interrupted by user.")
+        break
 
 
 plt.figure(figsize=(10, 6))

@@ -1,0 +1,8 @@
+Device Name,Serial Number,Date Time,Sample rate,Samples,Trigger,Channel 1,Power Supplies,Positive Supply,Voltage,Negative Supply,Source_File
+Discovery2,SN,2026-05-18 13,28530.7Hz,8192,Source,Range,ON,ON,3.5 V,OFF,acq_20260518_13-02-18-612.csv
+Discovery2,SN,2026-05-18 13,28530.7Hz,8192,Source,Range,ON,ON,3.5 V,OFF,acq_20260518_13-02-20-061.csv
+Discovery2,SN,2026-05-18 13,28530.7Hz,8192,Source,Range,ON,ON,3.5 V,OFF,acq_20260518_13-02-20-940.csv
+Discovery2,SN,2026-05-18 13,28530.7Hz,8192,Source,Range,ON,ON,3.5 V,OFF,acq_20260518_13-02-21-755.csv
+Discovery2,SN,2026-05-18 13,28530.7Hz,8192,Source,Range,ON,ON,3.5 V,OFF,acq_20260518_13-02-22-471.csv
+Discovery2,SN,2026-05-18 13,28530.7Hz,8192,Source,Range,ON,ON,3.5 V,OFF,acq_20260518_13-02-23-281.csv
+Discovery2,SN,2026-05-18 13,28530.7Hz,8192,Source,Range,ON,ON,3.5 V,OFF,acq_20260518_13-02-24-068.csv
