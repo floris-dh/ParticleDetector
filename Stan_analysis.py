@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import time
-from multiprocessing import Pool, cpu_count # Voor de extra kracht
+from multiprocessing import Pool, cpu_count 
 from tqdm import tqdm # Voor de voortgangsbalk
 from Richard_Lucy_deconv import richard_lucy_deconvolution, gauss
 
@@ -24,7 +24,7 @@ def process_single_file(file_path):
         # Alles wat 'vlakker' is dan -20 wordt genegeerd.
         if gradient_check:
             if min_gradient > -20: 
-                return None # Te flauw, waarschijnlijk ruis
+                return None # waarschijnlijk ruis
        
         # De integraal berekenen
         integral = np.trapezoid(np.abs(voltage), times)
@@ -61,17 +61,20 @@ if __name__ == "__main__":
     
     num_files = len(all_files)
     print(f"Gevonden: {num_files} bestanden.")
-    print(f"Analyse starten op {cpu_count()} CPU kernen...")
+    
+    
 
     # Multiprocessing Pool starten
     # Dit verdeelt de lijst 'all_files' over al de processor-kernen
     if use_multiprocessing:
+        print(f"Analyse starten op {cpu_count()} CPU kernen...")
         with Pool(processes=cpu_count()) as pool:
             # imap_unordered is vaak sneller; tqdm laat een mooie balk zien
             integral_list = list(tqdm(pool.imap_unordered(process_single_file, all_files), total=num_files))
     # Zonder multiprocessing, gewoon sequentieel
     #tqdm is progressie balk
-    else: 
+    else:
+        print("Analyse starten zonder multiprocessing...")
         integral_list = []
         for file in tqdm(all_files, total=num_files):
             integral = process_single_file(file)
@@ -83,9 +86,10 @@ if __name__ == "__main__":
     if len(integral_list) > 0:
         
         num_bins = int(np.sqrt(len(integral_list)))
+        
         counts, bin_edges = np.histogram(integral_list, bins=num_bins, density=True,)
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-        fwhm_waarde, piek_positie = calculate_FWHM(integral_list, bins=num_bins)
+        fwhm_waarde, piek_positie = calculate_FWHM(counts, bin_centers)
         waarde_per_bin = (bin_edges[-1] - bin_edges[0]) / num_bins
         sigma_bins = fwhm_waarde / (waarde_per_bin * (2 * np.sqrt(2 * np.log(2))))
 
