@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, root
 import time
 import os
 
@@ -15,28 +15,18 @@ def pulse_model_with_undershoot(t, t0, A, tau_1, tau_2, B, tau_3, C):
         E3 = np.exp(-dt / tau_3)
         model = C - (A + B) * E1 + A * E2 + B * E3
     
-    model = np.where(dt >= 0, model, C)
-    
-    return model
-
-def pulse_model_with_undershoots(t, t0, A, tau_decay, tau_rise, A_undershoot, tau_undershoot, baseline):
-    dt = t - t0
-    with np.errstate(divide='ignore', invalid='ignore'):
-        pulse = A * (np.exp(-dt / tau_decay) - np.exp(-dt / tau_rise))
-        undershoot = A_undershoot * (np.exp(-dt / tau_undershoot) - np.exp(-dt / tau_decay))
-    
-    total_shape = pulse - undershoot
-    total_shape = np.where(dt >= 0, total_shape, 0.0)
-    return -total_shape + baseline
+    return np.where(dt >= 0, model, C)
 
 plt.figure(figsize=(10, 6))
 
+integral_list = []
+
 i = 1
 while True:
-    filepath = f"RawData/acq{i:04d}.csv"
+    filepath = f"Data/RawData/acq{i:04d}.csv"
     if os.path.exists(filepath):
         try:
-            data = pd.read_csv(f"RawData/acq{i:04d}.csv", skiprows=10, header=None)
+            data = pd.read_csv(f"Data/RawData/acq{i:04d}.csv", skiprows=10, header=None)
             data.columns = ['times', 'voltage']
 
             t = data['times'].values
@@ -88,7 +78,6 @@ while True:
 
             # 5. Execute with robust error handling
             try:
-                print("Attempting fit with bounded optimization...")
                 popt, pcov = curve_fit(
                     pulse_model_with_undershoot, t, v, 
                     p0=p0, 
@@ -97,41 +86,52 @@ while True:
                 )
                 
                 # Extract optimized parameters
-                t0_f, A_f, td_f, tr_f, Au_f, tu_f, b_f = popt
+                t0, A, tau_1, tau_2, B, tau_3, C = popt
                 v_fit = pulse_model_with_undershoot(t, *popt)
                 chi_squared_red = np.sum((v - v_fit) ** 2) / (len(v) - len(popt))
                 if chi_squared_red > 1e-6:  # Arbitrary threshold for "goodness" of fit
                     discard = True
-                    print(f"Fit converged but has high chi-squared: {chi_squared_red:.3e}. Discarding this pulse.")
                 else:
                     discard = False
                 
-                print("\n--- FIT SUCCESSFUL ---")
-                print(f"Calculated True Peak Amplitude: {A_f:.4f} V")
-                print(f"Pulse Start Time (t0): {t0_f:.6f} s")
-                print(f"Preamplifier Decay Constant: {td_f:.6f} s")
+                # root_result = root(lambda x: pulse_model_with_undershoot(x, *popt) - C, 0.0015)
+                # t_root = root_result.x[0]
                 
-                plt.cla()
-                plt.plot(t, v, label='Raw Data', alpha=0.5, color='steelblue')
-                plt.plot(t, v_fit, label=f'Fit (χ²: {chi_squared_red:.2e})', color='red', linewidth=2.5)
-                plt.axvline(t0_f, color='purple', linestyle=':', label='Detected Onset (t0)')
+                # 1. Center the fit on zero
+                centered_fit = v_fit - C
+                negative_only_curve = np.where(centered_fit < 0, centered_fit, 0.0)
+                negative_integral = np.trapezoid(negative_only_curve, t)
+                
+                # print("\n--- FIT SUCCESSFUL ---")
+                # print(f"Calculated True Peak Amplitude: {A:.4f} V")
+                # print(f"Pulse Start Time (t0): {t0:.6f} s")
+                # print(f"Preamplifier Decay Constant: {tau_1:.6f} s")
+                # print(f"Negative Integral: {negative_integral:.4e} V*s")
+                # plt.cla()
+                # plt.plot(t, v, label='Raw Data', alpha=0.5, color='steelblue')
+                # plt.plot(t, v_fit, label=f'Fit (χ²: {chi_squared_red:.2e})', color='red', linewidth=2.5)
+                # plt.axhline(C, color='black', linestyle='--', label='Baseline')
+                # plt.axvline(t0, color='purple', linestyle=':', label='Detected Onset (t0)')
+                # plt.axvline(t_root, color='orange', linestyle='-.', label='Baseline Crossing Time (t_base)')
+                # if discard:
+                #     plt.title("DISCARDED PULSE - Poor Fit")
+                # else:
+                #     plt.title("CORRECT PULSE - Good Fit")
+                # plt.xlabel("Time (s)")
+                # plt.ylabel("Voltage (V)")
+                # plt.legend()
+                # plt.grid(True, alpha=0.3)
+                # plt.show(block=True)
                 if discard:
-                    plt.title("DISCARDED PULSE - Poor Fit")
+                    print("Discard" + " "*100, end="\r")
                 else:
-                    plt.title("CORRECT PULSE - Good Fit")
-                plt.xlabel("Time (s)")
-                plt.ylabel("Voltage (V)")
-                plt.legend()
-                plt.grid(True, alpha=0.3)
-                plt.show(block=True)
+                    print(f"{i/1000:.2f}% | t0: {t0:.6f} s | A: {A:.4f} V | tau_decay: {tau_1:.6f} s | tau_rise: {tau_2:.6f} s | A_undershoot: {B:.4f} V | tau_undershoot: {tau_3:.6f} s | Baseline: {C:.4f} V | χ²_red: {chi_squared_red:.2e}", end="\r")
+
                 
-
-
             except ValueError as e:
-                print(f"\nConfiguration Error: Check your bounds setup. Info: {e}")
+                print(f"Configuration Error: Check your bounds setup. Info: {e}", end="\r")
             except RuntimeError:
-                print("\nFit still failed. The optimizer couldn't converge within limits.")
-                print("Fallback strategy: Try narrowing your input time window array (t and v) around the pulse.")
+                print("Fit still failed. The optimizer couldn't converge within limits.", end="\r")
         except Exception as e:
             print(f"Error loading {filepath}: {e}")
             time.sleep(0.1)  # Wait briefly before trying again
@@ -140,3 +140,11 @@ while True:
         print(f"File not found: {filepath}")
         break
         
+counts, bins = np.histogram(integral_list, bins=50)
+plt.figure(figsize=(10, 6))
+plt.stairs(counts, bins)
+plt.xlabel('Negative Integral (V*s)')
+plt.ylabel('Frequency')
+plt.title('Distribution of Negative Integrals from Fitted Pulses')
+plt.grid(True, alpha=0.3)
+plt.show()
