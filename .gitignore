@@ -3,4 +3,5 @@
 **/.conda/
 **/.vscode/
 **/RawData/
-**/ProcessedData/
+**/Data/
+**/*.dwf3work

@@ -9,7 +9,7 @@ from numba import njit
 
 # 1. Define the model (Removed np.errstate overhead; bounds protect from divide-by-zero)
 @njit(fastmath=True, cache=True)
-def pulse_model_with_undershoot(t, t0, A, tau_1, tau_2, B, tau_3, C):
+def pulse_model(t, t0, A, tau_1, tau_2, B, tau_3, C):
     dt = t - t0
     E1 = np.exp(-dt / tau_1)
     E2 = np.exp(-dt / tau_2)
@@ -53,14 +53,19 @@ def process_single_file(filepath):
         bounds = (lower_bounds, upper_bounds)
 
         # Fit with a reduced maxfev to avoid hanging on garbage data
-        popt, pcov = curve_fit(
-            pulse_model_with_undershoot, t, v, 
-            p0=p0, bounds=bounds, maxfev=5000
+        popt, _ = curve_fit(
+            pulse_model, t, v,
+            p0=p0, bounds=bounds,
+            method='trf',       # Trust Region Reflective — better with bounds
+            maxfev=2000,        # you can go lower
+            ftol=1e-4,          # relax if sub-percent accuracy is fine
+            xtol=1e-4,
+            gtol=1e-4
         )
         
         # Calculate Goodness of fit
         C_fit = popt[6]
-        v_fit = pulse_model_with_undershoot(t, *popt)
+        v_fit = pulse_model(t, *popt)
         chi_squared_red = np.sum((v - v_fit) ** 2) / (len(v) - len(popt))
         
         if chi_squared_red > 1e-6:
@@ -80,7 +85,7 @@ def process_single_file(filepath):
 # 3. Main execution block
 if __name__ == '__main__':
     # Grab all files instantly
-    file_pattern = "Data/RawData/acq*.csv"
+    file_pattern = "Data/Radium2705/acq*.csv"
     all_files = glob.glob(file_pattern)
     
     if not all_files:
@@ -111,11 +116,13 @@ if __name__ == '__main__':
                     print(f"Processed {processed_count}/{len(all_files)} files. "
                           f"(Discarded: {discarded_count})", end="\r")
         
+        integrals = pd.DataFrame(-1*np.array(integral_list), columns=['Integral (V*s)'])
+        integrals.to_csv("Data/Radium2705/integrals.csv", index=False)
         print(f"\nProcessing complete! Successfully extracted {len(integral_list)} integrals.")
 
         # 4. Plot Histogram
         if integral_list:
-            counts, bins = np.histogram(integral_list, bins=50)
+            counts, bins = np.histogram(integral_list, bins=150)
             plt.figure(figsize=(10, 6))
             plt.stairs(counts, bins, fill=True, color='steelblue', alpha=0.7)
             plt.xlabel('Negative Integral (V*s)')
