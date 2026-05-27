@@ -6,7 +6,20 @@ import time
 import os
 
 # 1. Define the complete model function
-def pulse_model_with_undershoot(t, t0, A, tau_decay, tau_rise, A_undershoot, tau_undershoot, baseline):
+def pulse_model_with_undershoot(t, t0, A, tau_1, tau_2, B, tau_3, C):
+    dt = t - t0
+    with np.errstate(divide='ignore', invalid='ignore'):
+        # Correctly expanded one-liner
+        E1 = np.exp(-dt / tau_1)
+        E2 = np.exp(-dt / tau_2)
+        E3 = np.exp(-dt / tau_3)
+        model = C - (A + B) * E1 + A * E2 + B * E3
+    
+    model = np.where(dt >= 0, model, C)
+    
+    return model
+
+def pulse_model_with_undershoots(t, t0, A, tau_decay, tau_rise, A_undershoot, tau_undershoot, baseline):
     dt = t - t0
     with np.errstate(divide='ignore', invalid='ignore'):
         pulse = A * (np.exp(-dt / tau_decay) - np.exp(-dt / tau_rise))
@@ -15,9 +28,6 @@ def pulse_model_with_undershoot(t, t0, A, tau_decay, tau_rise, A_undershoot, tau
     total_shape = pulse - undershoot
     total_shape = np.where(dt >= 0, total_shape, 0.0)
     return -total_shape + baseline
-
-# 2. Load and isolate data
-
 
 plt.figure(figsize=(10, 6))
 
@@ -113,8 +123,7 @@ while True:
                 plt.ylabel("Voltage (V)")
                 plt.legend()
                 plt.grid(True, alpha=0.3)
-                plt.show(block=False)
-                plt.pause(0.1)  # Brief pause
+                plt.show(block=True)
                 
 
 
