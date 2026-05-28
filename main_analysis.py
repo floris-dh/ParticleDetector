@@ -1,7 +1,11 @@
+from pathlib import Path
+import glob
+import os
+import zipfile
 import numpy as np
 import polars as pl
 from scipy.optimize import curve_fit
-
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c):
@@ -111,3 +115,125 @@ def compute_all_integrals(params: pl.DataFrame, n_points: int = 1000) -> pl.Data
     return params.select('file').with_columns(
         pl.Series('integral_Vs', integrals)
     )
+    
+def compress_to_parquet(COMPRESSED_PARQUET, file_pattern):
+    all_files = glob.glob(file_pattern)
+
+    if not Path(COMPRESSED_PARQUET).exists():
+        if not all_files:
+            print("No loose acq*.csv files found to process.")
+        else:
+            print(f"Stage 1: Compressing {len(all_files)} CSVs into a single Parquet file...")
+            dfs = []
+            for fp in all_files:
+                # Quickly read files using Polars
+                df = pl.read_csv(
+                    fp, skip_rows=10, has_header=False, columns=[0, 1],
+                    schema_overrides={'column_1': pl.Float64, 'column_2': pl.Float64}
+                ).rename({'column_1': 'time', 'column_2': 'voltage'})
+                
+                # Tag rows with their originating filename so we can separate them later
+                df = df.with_columns(pl.lit(fp).alias('file'))
+                dfs.append(df)
+            
+            # Merge and save to disk
+            combined_df = pl.concat(dfs)
+            combined_df.write_parquet(COMPRESSED_PARQUET)
+            print(f"Done! Compressed data saved to: {COMPRESSED_PARQUET}")
+            
+            # ── NEW: ZIP BACKUP AND CLEANUP STEP ──────────────────────────────────
+            DATA_DIR = Path(COMPRESSED_PARQUET).parent
+            ZIP_FILENAME = DATA_DIR / "raw_csv_backup.zip"
+            
+            print(f"\nCreating ZIP backup at {ZIP_FILENAME}...")
+            with zipfile.ZipFile(ZIP_FILENAME, 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
+                for idx, file_path in enumerate(all_files, 1):
+                    p = Path(file_path)
+                    zipf.write(p, arcname=p.name)
+                    if idx % 500 == 0:
+                        print(f"  Zipped {idx}/{len(all_files)} files...", end="\r")
+                        
+            print(f"🎉 Backup successful!")
+            
+            # Double check both files exist and are populated before deleting anything
+            if Path(COMPRESSED_PARQUET).stat().st_size > 0 and ZIP_FILENAME.stat().st_size > 0:
+                print("\nSafely removing original loose CSV files from workspace...")
+                for file_path in all_files:
+                    os.remove(file_path)
+                print("Cleanup complete! Your folder layout is fully optimized.")
+            else:
+                print("Warning: File validation failed. Original CSVs were NOT deleted.")
+    else:
+        print(f"Stage 1 Skipped: {COMPRESSED_PARQUET} already exists (Loose CSVs already archived).")
+    
+    
+def fit_all_files(COMPRESSED_PARQUET, PARAMS_CSV):
+    # Load and print the first 5 rows
+    df = pl.read_parquet(COMPRESSED_PARQUET)
+    print(df.head(5))
+
+    # 1. Get the unique filenames from the parquet file without loading the data
+    unique_files = (
+        pl.scan_parquet(COMPRESSED_PARQUET)
+        .select("file")
+        .unique()
+        .collect()
+        ["file"]
+        .to_list()
+    )
+
+    rows = []
+    discarded = 0
+
+    with ProcessPoolExecutor() as executor:
+        # Pass just the FILEPATH and the TARGET FILENAME (simple strings!) to the workers
+        futures = {
+            executor.submit(fit_single_file, COMPRESSED_PARQUET, fp): fp 
+            for fp in unique_files
+        }
+        
+        for i, future in enumerate(as_completed(futures), 1):
+            result = future.result()
+            if result is not None:
+                rows.append(result)
+            else:
+                discarded += 1
+            if i % 10 == 0:
+                print(f"  {i}/{len(unique_files)} — kept {len(rows)}, discarded {discarded}", end='\r')
+
+    params_df = pl.DataFrame(rows)
+    params_df.write_csv(PARAMS_CSV)
+    print(f"\nStage 2 done — {len(params_df)} fits saved to {PARAMS_CSV}")
+    
+def compute_integrals(PARAMS_CSV, INTEGRAL_CSV):
+    params_df = pl.read_csv(PARAMS_CSV)
+    integrals_df = compute_all_integrals(params_df)
+    integrals_df.write_csv(INTEGRAL_CSV)
+    print(f"Stage 3 done — integrals saved to {INTEGRAL_CSV}")
+    
+def plot_hist(INTEGRAL_CSV, MEASUREMENT_ID):
+    import matplotlib.pyplot as plt
+    integrals_df = pl.read_csv(INTEGRAL_CSV)
+    plt.hist(integrals_df['integral_Vs'], bins=50, color='blue', alpha=0.7)
+    plt.title(f'Energy Spectrum {MEASUREMENT_ID}')
+    plt.xlabel('Integral (Vs)')
+    plt.ylabel('Count')
+    plt.grid(True)
+    plt.savefig(f"Data/{MEASUREMENT_ID}/integral_histogram.png")
+    plt.show()
+
+    
+if __name__ == "__main__":
+    
+    MEASUREMENT_ID = "Am241-220526"
+    
+    PARAMS_CSV   = f"Data/{MEASUREMENT_ID}/fitted_params.csv"
+    INTEGRAL_CSV = f"Data/{MEASUREMENT_ID}/integrals.csv"
+    file_pattern = f"Data/{MEASUREMENT_ID}/acq*.csv"
+    COMPRESSED_PARQUET = f"Data/{MEASUREMENT_ID}/raw_pulses_combined.parquet"
+    ZIP_FILE = f"Data/{MEASUREMENT_ID}/raw_pulses.zip"
+    
+    compress_to_parquet(COMPRESSED_PARQUET, file_pattern)
+    fit_all_files(COMPRESSED_PARQUET, PARAMS_CSV)
+    compute_integrals(PARAMS_CSV, INTEGRAL_CSV)
+    plot_hist(INTEGRAL_CSV, MEASUREMENT_ID)
