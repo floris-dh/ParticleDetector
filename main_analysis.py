@@ -219,13 +219,13 @@ def plot_hist(INTEGRAL_CSV, MEASUREMENT_ID):
     plt.xlabel('Integral (Vs)')
     plt.ylabel('Count')
     plt.grid(True)
-    plt.savefig(f"Data/{MEASUREMENT_ID}/integral_histogram.png")
+    plt.savefig(f"Data/{MEASUREMENT_ID}/integral_histogram.pdf")
     plt.show()
 
     
 if __name__ == "__main__":
     
-    MEASUREMENT_ID = "Am241-220526"
+    MEASUREMENT_ID = "Ra226-270526-2"
     
     PARAMS_CSV   = f"Data/{MEASUREMENT_ID}/fitted_params.csv"
     INTEGRAL_CSV = f"Data/{MEASUREMENT_ID}/integrals.csv"
