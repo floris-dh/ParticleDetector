@@ -17,7 +17,6 @@ def fit_single_file(parquet_path, target_file):
     """
     Receives a preloaded slice of data for a specific file, avoiding disk I/O.
     """
-    # noinspection PyBroadException
     try:
         sub_df = (
             pl.scan_parquet(parquet_path)
