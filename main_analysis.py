@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ── Model ─────────────────────────────────────────────────────────────────────
-def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c):
+def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c) -> np.ndarray:
     dt = t - t0
     result = (c - (a + b) * np.exp(-dt / tau_1)
               + a * np.exp(-dt / tau_2)
@@ -17,13 +17,13 @@ def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c):
 
 
 # ── Stage 1 worker: Polars reads the CSV, scipy fits it ───────────────────────
-def fit_single_file(parquet_path, target_file):
+def fit_single_file(MEASUREMENT_ID, target_file) -> dict | None:
     """
     Receives a preloaded slice of data for a specific file, avoiding disk I/O.
     """
     try:
         sub_df = (
-            pl.scan_parquet(parquet_path)
+            pl.scan_parquet(f"Data/{MEASUREMENT_ID}/raw_pulses_combined.parquet")
             .filter(pl.col("file") == target_file)
             .collect()
         )
@@ -116,7 +116,9 @@ def compute_all_integrals(params: pl.DataFrame, n_points: int = 1000) -> pl.Data
         pl.Series('integral_Vs', integrals)
     )
     
-def compress_to_parquet(COMPRESSED_PARQUET, file_pattern):
+def compress_to_parquet(MEASUREMENT_ID) -> None:
+    file_pattern = f"Data/{MEASUREMENT_ID}/acq*.csv"
+    COMPRESSED_PARQUET = f"Data/{MEASUREMENT_ID}/raw_pulses_combined.parquet"
     all_files = glob.glob(file_pattern)
 
     if not Path(COMPRESSED_PARQUET).exists():
@@ -167,7 +169,9 @@ def compress_to_parquet(COMPRESSED_PARQUET, file_pattern):
         print(f"Stage 1 Skipped: {COMPRESSED_PARQUET} already exists (Loose CSVs already archived).")
     
     
-def fit_all_files(COMPRESSED_PARQUET, PARAMS_CSV):
+def fit_all_files(MEASUREMENT_ID) -> None:
+    PARAMS_CSV = f"Data/{MEASUREMENT_ID}/fitted_params.csv"
+    COMPRESSED_PARQUET = f"Data/{MEASUREMENT_ID}/raw_pulses_combined.parquet"
     # Load and print the first 5 rows
     df = pl.read_parquet(COMPRESSED_PARQUET)
     print(df.head(5))
@@ -205,13 +209,16 @@ def fit_all_files(COMPRESSED_PARQUET, PARAMS_CSV):
     params_df.write_csv(PARAMS_CSV)
     print(f"\nStage 2 done — {len(params_df)} fits saved to {PARAMS_CSV}")
     
-def compute_integrals(PARAMS_CSV, INTEGRAL_CSV):
+def compute_integrals(MEASUREMENT_ID) -> None:
+    PARAMS_CSV   = f"Data/{MEASUREMENT_ID}/fitted_params.csv"
+    INTEGRAL_CSV = f"Data/{MEASUREMENT_ID}/integrals.csv"
     params_df = pl.read_csv(PARAMS_CSV)
     integrals_df = compute_all_integrals(params_df)
     integrals_df.write_csv(INTEGRAL_CSV)
     print(f"Stage 3 done — integrals saved to {INTEGRAL_CSV}")
     
-def plot_hist(INTEGRAL_CSV, MEASUREMENT_ID):
+def plot_hist(MEASUREMENT_ID) -> None:
+    INTEGRAL_CSV = f"Data/{MEASUREMENT_ID}/integrals.csv"
     import matplotlib.pyplot as plt
     integrals_df = pl.read_csv(INTEGRAL_CSV)
     plt.hist(integrals_df['integral_Vs'], bins=50, color='blue', alpha=0.7)
@@ -219,7 +226,7 @@ def plot_hist(INTEGRAL_CSV, MEASUREMENT_ID):
     plt.xlabel('Integral (Vs)')
     plt.ylabel('Count')
     plt.grid(True)
-    plt.savefig(f"Data/{MEASUREMENT_ID}/integral_histogram.pdf")
+    plt.savefig(f"Figures/E_Spectrum_{MEASUREMENT_ID}.pdf")
     plt.show()
 
     
@@ -227,13 +234,7 @@ if __name__ == "__main__":
     
     MEASUREMENT_ID = "Ra226-270526-2"
     
-    PARAMS_CSV   = f"Data/{MEASUREMENT_ID}/fitted_params.csv"
-    INTEGRAL_CSV = f"Data/{MEASUREMENT_ID}/integrals.csv"
-    file_pattern = f"Data/{MEASUREMENT_ID}/acq*.csv"
-    COMPRESSED_PARQUET = f"Data/{MEASUREMENT_ID}/raw_pulses_combined.parquet"
-    ZIP_FILE = f"Data/{MEASUREMENT_ID}/raw_pulses.zip"
-    
-    compress_to_parquet(COMPRESSED_PARQUET, file_pattern)
-    fit_all_files(COMPRESSED_PARQUET, PARAMS_CSV)
-    compute_integrals(PARAMS_CSV, INTEGRAL_CSV)
-    plot_hist(INTEGRAL_CSV, MEASUREMENT_ID)
+    compress_to_parquet(MEASUREMENT_ID)
+    fit_all_files(MEASUREMENT_ID)
+    compute_integrals(MEASUREMENT_ID)
+    plot_hist(MEASUREMENT_ID)
