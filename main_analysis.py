@@ -6,6 +6,7 @@ import numpy as np
 import polars as pl
 from scipy.optimize import curve_fit
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import matplotlib.pyplot as plt
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c) -> np.ndarray:
@@ -17,7 +18,7 @@ def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c) -> np.ndarray:
 
 
 # ── Stage 1 worker: Polars reads the CSV, scipy fits it ───────────────────────
-def fit_single_file(MEASUREMENT_ID, target_file) -> dict | None:
+def fit_single_file(MEASUREMENT_ID, target_file):
     """
     Receives a preloaded slice of data for a specific file, avoiding disk I/O.
     """
@@ -44,26 +45,26 @@ def fit_single_file(MEASUREMENT_ID, target_file) -> dict | None:
             return None
 
         # Downsample for fitting
-        stride = max(1, len(t) // 300)
+        stride = max(1, len(t) // 100)
         t_fit, v_fit = t[::stride], v[::stride]
 
         p0 = [t_at_min - span * 0.05, est_a, span * 0.15,
               span * 0.01, est_a * 0.3, span * 0.5, est_baseline]
         bounds = (
-            [t[0], 0.001, 1e-6, 1e-7, 0.0, 1e-5, est_baseline - 0.01],
-            [t_at_min, 0.1, span, span * 0.2, est_a * 2.0, span * 5.0, est_baseline + 0.01]
+            [-0.005, 0.001, 1e-6, 1e-7, 0.0, 1e-5, est_baseline - 0.01],
+            [0.005, 0.5, span, span * 0.2, est_a * 2.0, span * 5.0, est_baseline + 0.01]
         )
 
         popt, _ = curve_fit(
             pulse_model, t_fit, v_fit, p0=p0, bounds=bounds,method='trf',
             maxfev=2000, ftol=1e-4, xtol=1e-4, gtol=1e-4
         )
-
-        residuals = v_fit - pulse_model(t_fit, *popt)
-        chi2_red = np.sum(residuals ** 2) / (len(v_fit) - len(popt))
+        
+        chi2_red = np.sum((v_fit - pulse_model(t_fit, *popt))**2) / (len(t_fit) - len(popt))
+        
         if chi2_red > 1e-6:
             return None
-
+        
         return {
             'file': target_file,
             't0': popt[0], 'A': popt[1], 'tau_1': popt[2],
@@ -76,7 +77,7 @@ def fit_single_file(MEASUREMENT_ID, target_file) -> dict | None:
 
 
 # ── Stage 2: vectorized integrals, fully in Polars ────────────────────────────
-def compute_all_integrals(params: pl.DataFrame, n_points: int = 1000) -> pl.DataFrame:
+def compute_all_integrals(params: pl.DataFrame, n_points: int = 1000):
     """
     Reconstruct each fitted pulse on an n_points grid and integrate.
     All heavy math stays in numpy (Polars doesn't do broadcasting),
@@ -137,6 +138,8 @@ def compress_to_parquet(MEASUREMENT_ID) -> None:
                 # Tag rows with their originating filename so we can separate them later
                 df = df.with_columns(pl.lit(fp).alias('file'))
                 dfs.append(df)
+                
+                print(f"  Processed {len(dfs)}/{len(all_files)} files...", end="\r")
             
             # Merge and save to disk
             combined_df = pl.concat(dfs)
@@ -181,7 +184,7 @@ def fit_all_files(MEASUREMENT_ID) -> None:
         pl.scan_parquet(COMPRESSED_PARQUET)
         .select("file")
         .unique()
-        .collect()
+        .collect(engine='streaming')
         ["file"]
         .to_list()
     )
@@ -192,7 +195,7 @@ def fit_all_files(MEASUREMENT_ID) -> None:
     with ProcessPoolExecutor() as executor:
         # Pass just the FILEPATH and the TARGET FILENAME (simple strings!) to the workers
         futures = {
-            executor.submit(fit_single_file, COMPRESSED_PARQUET, fp): fp 
+            executor.submit(fit_single_file, MEASUREMENT_ID, fp): fp 
             for fp in unique_files
         }
         
@@ -221,7 +224,8 @@ def plot_hist(MEASUREMENT_ID) -> None:
     INTEGRAL_CSV = f"Data/{MEASUREMENT_ID}/integrals.csv"
     import matplotlib.pyplot as plt
     integrals_df = pl.read_csv(INTEGRAL_CSV)
-    plt.hist(integrals_df['integral_Vs'], bins=50, color='blue', alpha=0.7)
+    binsize = np.sqrt(len(integrals_df))
+    plt.hist(integrals_df['integral_Vs'], bins=int(binsize), color='blue', alpha=0.7)
     plt.title(f'Energy Spectrum {MEASUREMENT_ID}')
     plt.xlabel('Integral (Vs)')
     plt.ylabel('Count')
@@ -232,9 +236,9 @@ def plot_hist(MEASUREMENT_ID) -> None:
     
 if __name__ == "__main__":
     
-    MEASUREMENT_ID = "Ra226-270526-2"
+    MEASUREMENT_ID = "Ra226-290526-1"
     
-    compress_to_parquet(MEASUREMENT_ID)
+    compress_to_parquet(MEASUREMENT_ID) 
     fit_all_files(MEASUREMENT_ID)
     compute_integrals(MEASUREMENT_ID)
     plot_hist(MEASUREMENT_ID)
