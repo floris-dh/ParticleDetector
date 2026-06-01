@@ -6,7 +6,6 @@ import numpy as np
 import polars as pl
 from scipy.optimize import curve_fit
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import matplotlib.pyplot as plt
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c) -> np.ndarray:
