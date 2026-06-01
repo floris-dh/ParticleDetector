@@ -7,7 +7,7 @@ import time
 import multiprocessing as mp
 
 """ We made quite a few assumptions 
- 1 stopping power volgt een power law (gefit op NIST data) with a fit of a * E^b, 
+ 1 stopping power follows a power law (gefit op NIST data) with a fit of a * E^b, 
  also with a certain enery range that can be altered if relevant.
  2 For energy straggling is moddeled as a gaussian which simulates collisions with electrons,
  beacause alpha paricles are much heavier than electrons, which whty we took the value of 0.01 for the statistical noise. 
