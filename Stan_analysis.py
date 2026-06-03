@@ -5,7 +5,7 @@ import os
 import time
 from multiprocessing import Pool, cpu_count 
 from tqdm import tqdm # Voor de voortgangsbalk
-from Richard_Lucy_deconv import richard_lucy_deconvolution, gauss
+
 
 use_multiprocessing = False # set to True if you want to use all CPU cores for processing
 gradient_check = False # set to False if you want to skip the gradient check
