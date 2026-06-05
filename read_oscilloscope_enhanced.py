@@ -6,8 +6,8 @@ from scipy.optimize import curve_fit
 from concurrent.futures import ProcessPoolExecutor
 
 # --- Configuration ---
-CSV_FILE_PATH = r"Data\Pu-239_010626.csv"
-OUTPUT_FOLDER = r"Data\Pu-239_010626_output"
+CSV_FILE_PATH = r"Data\Am241_050626-1.csv"
+OUTPUT_FOLDER = r"Data\Am241-050626-1_output"
 MAX_PLOTS = 10  
 
 def pulse_model(t, t0, a, tau_1, tau_2, b, tau_3, c) -> np.ndarray:
@@ -56,7 +56,8 @@ def fit_single_file(packet):
         if chi2_red > 1e-6:
             return None
         
-        # Keep arrays for the first few items to handle plotting without re-filtering
+        
+# Keep arrays for the first few items to handle plotting without re-filtering
         return {
             'chunk_id': chunk_id,
             't0': popt[0], 'A': popt[1], 'tau_1': popt[2],
@@ -69,26 +70,71 @@ def fit_single_file(packet):
         return None
     
 def compute_integrals(results_df):
-    print(f"Computing integrals for {len(results_df)} pulses...")
+    print(f"Computing integrals until signal returns to baseline (C)...")
 
-    # Vectorized expressions entirely native to Polars (Much cleaner than NumPy unpacking)
-    dt = results_df["t_end"] - results_df["t0"]
-    dt = pl.when(dt > 0).then(dt).otherwise(0.0)
+    # 1. Haal de parameters naar NumPy
+    chunk_ids = results_df["chunk_id"].to_numpy()
+    A = results_df["A"].to_numpy()
+    B = results_df["B"].to_numpy()
+    tau_1 = results_df["tau_1"].to_numpy()
+    tau_2 = results_df["tau_2"].to_numpy()
+    tau_3 = results_df["tau_3"].to_numpy()
+    
+    num_pulses = len(results_df)
+    dt_zero_arr = np.zeros(num_pulses)
 
-    integrals_df = results_df.with_columns(
+    # We scannen per puls heel snel een tijd-vector om het exacte nulpunt te vinden
+    # Dit is extreem robuust en voorkomt dat een solver verdwaalt in de asymptotische staart
+    for i in range(num_pulses):
+        # Maak een fijn tijdsraster vanaf 0 tot een ruime schatting van de pulslengte
+        max_t = 5.0 * max(tau_2[i], tau_3[i])
+        t_scan = np.linspace(0.0, max_t, 1000)
+        
+        # Bereken het model (zonder baseline C, dus we zoeken waar dit 0 wordt)
+        with np.errstate(over='ignore'):
+            f_scan = -(A[i] + B[i]) * np.exp(-t_scan / tau_1[i]) + A[i] * np.exp(-t_scan / tau_2[i]) + B[i] * np.exp(-t_scan / tau_3[i])
+        
+        # De puls start negatief. We zoeken het EERSTE punt NA de piek waar het signaal >= 0 wordt
+        # Zoek eerst de index van de minimale waarde (de piek van de puls)
+        peak_idx = np.argmin(f_scan)
+        
+        # Zoek vanaf de piek naar het moment dat hij de nullijn kruist
+        zero_crossings = np.where(f_scan[peak_idx:] >= 0)[0]
+        
+        if len(zero_crossings) > 0:
+            # Gevonden! Neem de exacte tijd van de kruising
+            dt_zero_arr[i] = t_scan[peak_idx + zero_crossings[0]]
+        else:
+            # Mocht hij de 0 net niet aantikken in de scan, neem dan het einde van de scan
+            dt_zero_arr[i] = max_t
+
+    # 2. Voeg de stabiele dt_zero toe aan Polars
+    results_with_dt = results_df.with_columns(
+        dt_zero = pl.Series(dt_zero_arr)
+    )
+
+    # 3. Bereken de integraal (C - V(t)), wat de pure positieve oppervlakte geeft van de dip
+    integrals_df = results_with_dt.with_columns(
         pulse_integral = (
-            (pl.col("A") + pl.col("B")) * pl.col("tau_1") * ((-dt / pl.col("tau_1")).exp() - 1.0)
-            - pl.col("A") * pl.col("tau_2") * ((-dt / pl.col("tau_2")).exp() - 1.0)
-            - pl.col("B") * pl.col("tau_3") * ((-dt / pl.col("tau_3")).exp() - 1.0)
+            - (pl.col("A") + pl.col("B")) * pl.col("tau_1") * ((-pl.col("dt_zero") / pl.col("tau_1")).exp() - 1.0)
+            + pl.col("A") * pl.col("tau_2") * ((-pl.col("dt_zero") / pl.col("tau_2")).exp() - 1.0)
+            + pl.col("B") * pl.col("tau_3") * ((-pl.col("dt_zero") / pl.col("tau_3")).exp() - 1.0)
         )
+    )
+    
+    # Vervang eventuele zeldzame NaN/negatieve uitschieters door 0.0
+    integrals_df = integrals_df.with_columns(
+        pulse_integral = pl.when(pl.col("pulse_integral") > 0)
+                           .then(pl.col("pulse_integral"))
+                           .otherwise(0.0)
     ).select(["chunk_id", "pulse_integral"]).sort("chunk_id")
 
     output_path = os.path.join(OUTPUT_FOLDER, "pulse_integrals.csv")
     integrals_df.write_csv(output_path)
     
     print("\n--- Processing Complete ---")
-    print(integrals_df.head(5))
-    print(f"\nSuccessfully saved integrals to: '{output_path}'")
+    print(integrals_df.head(20)) # Toon er direct 20 om het resultaat te keuren
+    print(f"\nSuccessfully saved bounded integrals to: '{output_path}'")
 
 def main():
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
