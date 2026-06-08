@@ -5,7 +5,7 @@ import pandas as pd
 import os
 import time
 E_start = float(input("Enter the starting energy (in MeV): "))
-distance = float(input("distance from the source to the detector (in mm): "))
+distance = float(input("Distance from the source to the detector (in mm): "))
 n_particles = int(1e5)
 step_size = 0.05 #in mm
 start_time = time.time()
@@ -27,8 +27,8 @@ def power_law(E, a, b):
 popt, _ = curve_fit(power_law, df_filtered['Energy'], y_mm)
 a, b = popt
 
-print(f"Constante a = {a:.6f}")
-print(f"Exponent  b = {b:.6f}")
+print(f"Constant a = {a:.6f}")
+print(f"Exponent b = {b:.6f}")
 
 def simulation(E_start, distance, n_particles, step_size= 0.01):
     E = E_start
@@ -42,19 +42,19 @@ def simulation(E_start, distance, n_particles, step_size= 0.01):
 
 energies_at_detector = []
 for i in range(n_particles):
-    # schiet elk deeltje 1 voor 1 af
+    # fire each particle sequentially
     result_E = simulation(E_start, distance, n_particles, step_size)
     energies_at_detector.append(result_E)
 
 
 plt.hist(energies_at_detector, bins=int(np.sqrt(len(energies_at_detector))), color='blue', edgecolor='black')
-plt.title(f"Geregistreerd Spectrum ({distance} mm lucht)")
+plt.title(f"Recorded Spectrum ({distance} mm air)")
 plt.xlabel("Energy at detector [MeV]")
 plt.ylabel(f"n_particles {n_particles}")
 
 
 end_time = time.time()
-print(f"{end_time - start_time:.2f} seconden.")
+print(f"{end_time - start_time:.2f} seconds.")
 plt.show()
 
 
