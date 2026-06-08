@@ -262,8 +262,8 @@ if __name__ == "__main__":
             "plots": 10
         },
         "Ra226": {
-            "csv": r"Data\Ra226_050626-1.csv",
-            "output": r"Data\Ra226-050626-1_output",
+            "csv": r"C:\Users\Stanv\OneDrive\Bureaublad\Ra-080626-3.csv",
+            "output": r"Data\Ra226-050626-2_output",
             "plots": 10
         }
     }
