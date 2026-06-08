@@ -90,7 +90,7 @@ class AlphaSpectrumAnalyser:
         """
         weights = np.ones(window_size) / window_size
         smoothed_counts = np.convolve(data, weights, mode='full')[:len(data)]
-        variance_smoothed = np.convolve(data, weights**2, mode='full')[:len(data)]
+        variance_smoothed = np.convolve(data **2, weights, mode='full')[:len(data)] - smoothed_counts ** 2
         return smoothed_counts, np.sqrt(variance_smoothed)
 
     def _multi_gaussian_model(self, x, *params):
@@ -138,10 +138,17 @@ class AlphaSpectrumAnalyser:
         print(f"[{self.isotope_name}] Automatic peak detection and Gaussian curve fit...")
         
         # Find initial peaks using find_peaks with prominence
-        peaks, _ = find_peaks(self.counts, prominence=25)
+        all_peaks, properties = find_peaks(self.counts, prominence=5)
         
-        if len(peaks) != self.num_peaks:
-            raise ValueError(f"Not correct amount of peaks found for {self.isotope_name}. Detected: {len(peaks)}, Required: {self.num_peaks}")
+        if len(all_peaks) != self.num_peaks:
+            prominences = properties['prominences']
+            top_indices = np.argsort(prominences)[-self.num_peaks:]
+            peaks = all_peaks[top_indices]
+        else:
+            peaks = all_peaks
+        
+        # 3. CRITICAL: Sort left-to-right so peak index matching works chronologically
+        peaks = np.sort(peaks)
 
         # Build Dynamic initial guess and bounds based on detected peaks
         init_guess = []
@@ -163,7 +170,7 @@ class AlphaSpectrumAnalyser:
         # Fit to the data using the multi-Gaussian model
         popt, pcov, infodict, mesg, ier = curve_fit(
             self._multi_gaussian_model, self.x[mask], self.counts[mask], 
-            p0=init_guess, bounds=(lower_bounds, upper_bounds), full_output=True
+            p0=init_guess, bounds=(lower_bounds, upper_bounds), full_output=True, sigma=self.sigma_counts[mask], absolute_sigma=True
         )
         
         self.popt = popt
@@ -236,7 +243,7 @@ class AlphaSpectrumAnalyser:
         6. Add legends, grid, and title to the plot, and save it as a PDF file in the specified output folder with a filename that includes the isotope name and calibration status.
         """
         os.makedirs(output_folder, exist_ok=True)
-        plt.figure(figsize=(8, 5.5))
+        plt.figure(figsize=(8, 5.5), facecolor='#B8B8AA')
         
         def linear_func(x, a, b): return a * x + b
             
@@ -252,8 +259,7 @@ class AlphaSpectrumAnalyser:
         y_fit_mev_masked = np.where(y_fit_mev > self.threshold, y_fit_mev, np.nan)
         
         plt.plot(x_fit_mev, y_fit_mev_masked, color='red', linewidth=2, label=fr'Multi-Gaussian Fit ($\chi^2_{{red}}$ AU: {self.chi2red:.1e})', alpha=0.4)
-        plt.axhline(self.threshold, color='orange', linestyle='--', alpha=0.4, label=f'Threshold ({self.threshold:.1f} counts)')
-        
+        plt.fill_between(calibrated_x, self.counts - self.sigma_counts, self.counts + self.sigma_counts, color='gray', alpha=0.3, step='mid', label='Error Bars (1$\sigma$)')
         # 3. Annotaties en verticale indicatielijnen plaatsen
         for i in range(self.num_peaks):
             amp_mev = self.popt_mev[i * 3]
@@ -261,13 +267,22 @@ class AlphaSpectrumAnalyser:
             lit_e = self.lit_energies[i]
             
             plt.annotate(
-                f'{lit_e:.2f} MeV', 
-                (mu_mev, amp_mev), 
-                textcoords="offset points", 
-                xytext=(0, 15), 
+                f'{lit_e:.1f} MeV', 
+                xy=(mu_mev, 0),               # Arrow tip points here (on the axis)
+                xytext=(mu_mev, 0.16 * np.max(self.counts)),         # Text and arrow base start here (Y=130)
+                textcoords="data",            # Use data coordinates for precise placement
                 ha='center',
-                weight='bold'
+                va='bottom',                  # Sits text right above the arrow base
+                weight='bold',
+                arrowprops=dict(
+                    arrowstyle="->",          # Simple clean pointer
+                    color='#E0607E',          # Matching your pink style
+                    lw=2,                     # Line width
+                    shrinkA=5,                # Spacing between text and arrow base
+                    shrinkB=2                 # Spacing between arrow tip and axis line
+                )
             )
+
         # Grafiekopmaak
         plt.xlabel('Energy (MeV)')
         plt.ylabel('Counts')
@@ -298,25 +313,25 @@ class AlphaSpectrumAnalyser:
 # =============================================================================
 if __name__ == "__main__":
     
-    # target_source = "Ra226"  
-    # cfg = r"Data\Ra226-290526-1\integrals.csv"
+    target_source = "Ra226"  
+    cfg = r"Data\Ra226-290526-1\integrals.csv"
     
-    # analysis = AlphaSpectrumAnalyser(
-    #     csv_path=cfg,
-    #     isotope_name=target_source
-    # )
+    analysis = AlphaSpectrumAnalyser(
+        csv_path=cfg,
+        isotope_name=target_source
+    )
     
-    # analysis.run_full_analysis()
+    analysis.run_full_analysis()
 
-    # target_source = "Pu239"  
-    # cfg = r"Data\Pu239-050626-1_output\pulse_integrals.csv"
+    target_source = "Pu239"  
+    cfg = r"Data\Pu239-050626-1_output\pulse_integrals.csv"
     
-    # analysis = AlphaSpectrumAnalyser(
-    #     csv_path=cfg,
-    #     isotope_name=target_source
-    #     )
+    analysis = AlphaSpectrumAnalyser(
+        csv_path=cfg,
+        isotope_name=target_source
+        )
     
-    # analysis.run_full_analysis()
+    analysis.run_full_analysis()
     
     target_source = "Am241"  
     cfg = r"Data\Am241-050626-1_output\pulse_integrals.csv"
