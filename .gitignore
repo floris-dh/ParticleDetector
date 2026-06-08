@@ -3,6 +3,9 @@
 **/.conda/
 **/.vscode/
 **/RawData/
+**/RawData_Am241/
+**/RawData_Ra226/
+**/RawData_Pu/
 **/Data/
 **/*.dwf3work
 **/WaveformsFiles/
