@@ -52,6 +52,16 @@ $$ \text{FWHM} = 2.355 \cdot \sigma_{\text{MeV}} $$
 
 *(Note: $2.355 \approx 2\sqrt{2\ln 2}$ is the conversion factor from standard deviation to FWHM for a Gaussian distribution).*
 
+### Statistical and Computational Methods in `alpha_spectrum_analyser.py`
+To achieve the above energy spectrum analysis and calibration, several statistical and numerical methods are employed:
+*   **Histogram Binning**: Data is grouped into bins using the square-root rule ($k = \sqrt{N}$, where $N$ is the number of data points) to form the raw spectrum.
+*   **Moving Average Smoothing**: A uniform kernel convolution is applied to smooth the histogram counts and reduce noise.
+*   **Error Estimation**: The variance of the smoothed counts is computed via convolution to estimate the standard deviation ($\sigma$). This allows for computing and visualizing approximately 95% confidence intervals ($\pm 2\sigma$).
+*   **Peak Detection**: Prominence-based peak finding (`scipy.signal.find_peaks`) isolates significant peaks from the background.
+*   **Non-linear Least Squares Fitting**: The multi-Gaussian model is fitted using `scipy.optimize.curve_fit` with dynamically computed parameter bounds.
+*   **Goodness of Fit**: The fit quality is quantified using the reduced Chi-squared ($\chi^2_{red}$) metric derived from the fit residuals.
+*   **Linear Regression**: Used to establish the linear mapping between the fitted centroids in arbitrary units and the literature energy values in MeV.
+
 ## Project Architecture
 *   **`read_and_process.py`**: Takes raw CSV outputs from the AD2. It chunks the data, cleans it, and uses parallel processing (`ProcessPoolExecutor`) to fit the multi-exponential model to thousands of pulses simultaneously.
 *   **`alpha_spectrum_analyser.py`**: Ingests the pulse integrals, constructs the histograms, and executes the multi-Gaussian peak fitting. Finally, it aligns the centroids with expected literature energies to produce calibrated plots.
@@ -63,3 +73,6 @@ $$ \text{FWHM} = 2.355 \cdot \sigma_{\text{MeV}} $$
 *   `numpy` & `scipy` (Signal processing, non-linear least squares fitting)
 *   `polars` (Fast out-of-core data manipulation for large oscilloscope CSVs)
 *   `matplotlib` (Data visualization)
+
+---
+*Note: This README was written and updated by GitHub Copilot.*
