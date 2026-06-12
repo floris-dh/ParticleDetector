@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # 1. Load your data
-data = pl.read_csv(r"Data\Ra-080626-2_output\fitted_params.csv")
-integral_data = pl.read_csv(r"Data\Ra-080626-2_output\pulse_integrals.csv")
+data = pl.read_csv(r"RawData\Ra-080626-2_output\fitted_params.csv")
+integral_data = pl.read_csv(r"RawData\Ra-080626-2_output\pulse_integrals.csv")
 
 # 2. Define your threshold for "very small C"
 C_THRESHOLD = 0.001  # Adjust this value based on your actual baseline scale
@@ -79,8 +79,8 @@ fig.legend(
 
 plt.suptitle("Pulses collected from Ra226", fontsize=14, weight='bold', color="#F5FDFF")
 ax.axhline(0, color='#BBC2C6', linestyle='--', alpha=0.5)
-ax.set_xlabel('Time (s)', color='#BBC2C6')
-ax.set_ylabel('Voltage (V)', color='#BBC2C6')
+ax.set_xlabel('Time (s)', color='#BBC2C6', weight='bold', fontsize=12)
+ax.set_ylabel('Voltage (V)', color='#BBC2C6', weight='bold', fontsize=12)
 ax.grid(alpha=0.3, color='#BBC2C6', linestyle='--')
 ax.set_facecolor('#223441')
 ax.tick_params(colors='#BBC2C6', which='both')
