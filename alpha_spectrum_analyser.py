@@ -48,6 +48,18 @@ class AlphaSpectrumAnalyser:
         self.calib_popt = None  # [a, b] for a*x + b
         self.popt_mev = None
 
+    def _require_loaded(self):
+        if self.x is None or self.counts is None or self.sigma_counts is None:
+            raise RuntimeError("Spectrum data is not loaded yet. Call load_and_bin_data() first.")
+
+    def _require_fit(self):
+        if self.popt is None:
+            raise RuntimeError("Spectrum has not been fit yet. Call fit_spectrum() first.")
+
+    def _require_calibration(self):
+        if self.calib_popt is None or self.popt_mev is None:
+            raise RuntimeError("Spectrum has not been calibrated yet. Call calibrate_and_scale() first.")
+
     def load_and_bin_data(self):
         """
         Function to load the pulse integral data from CSV and create a histogram in arbitrary units (AU).
@@ -136,9 +148,14 @@ class AlphaSpectrumAnalyser:
         """
         
         print(f"[{self.isotope_name}] Automatic peak detection and Gaussian curve fit...")
+        self._require_loaded()
+        assert self.x is not None and self.counts is not None and self.sigma_counts is not None
+        x = self.x
+        counts = self.counts
+        sigma_counts = self.sigma_counts
         
         # Find initial peaks using find_peaks with prominence
-        all_peaks, properties = find_peaks(self.counts, prominence=5)
+        all_peaks, properties = find_peaks(counts, prominence=5)
         
         if len(all_peaks) != self.num_peaks:
             prominences = properties['prominences']
@@ -150,7 +167,7 @@ class AlphaSpectrumAnalyser:
         # 3. CRITICAL: Sort left-to-right so peak index matching works chronologically
         peaks = np.sort(peaks)
         
-        print(f"  Detected peaks at indices: {peaks} with energies (AU): {self.x[peaks]} and counts: {self.counts[peaks]}")
+        print(f"  Detected peaks at indices: {peaks} with energies (AU): {x[peaks]} and counts: {counts[peaks]}")
 
         # Build Dynamic initial guess and bounds based on detected peaks
         init_guess = []
@@ -159,25 +176,25 @@ class AlphaSpectrumAnalyser:
         
         for i in range(self.num_peaks):
             p_idx = peaks[i]
-            amp_g = self.counts[p_idx]
-            mu_g = self.x[p_idx]
+            amp_g = counts[p_idx]
+            mu_g = x[p_idx]
             sig_g = 1e-6
             
             init_guess.extend([amp_g, mu_g, sig_g])
             lower_bounds.extend([0, mu_g * 0.8, 0])
             upper_bounds.extend([amp_g * 1.5, mu_g * 1.2, 0.01])
 
-        mask = self.counts > self.threshold
+        mask = counts > self.threshold
 
         # Fit to the data using the multi-Gaussian model
         popt, pcov, infodict, mesg, ier = curve_fit(
-            self._multi_gaussian_model, self.x[mask], self.counts[mask], 
-            p0=init_guess, bounds=(lower_bounds, upper_bounds), full_output=True, sigma=self.sigma_counts[mask], absolute_sigma=True
+            self._multi_gaussian_model, x[mask], counts[mask], 
+            p0=init_guess, bounds=(lower_bounds, upper_bounds), full_output=True, sigma=sigma_counts[mask], absolute_sigma=True
         )
         
         self.popt = popt
         self.pcov = pcov
-        self.chi2red = np.sum(infodict['fvec']**2) / (len(self.x[mask]) - len(popt))
+        self.chi2red = np.sum(infodict['fvec']**2) / (len(x[mask]) - len(popt))
         print(f"  Reduced Chi2 (AU): {self.chi2red:.2e}")
 
     def calibrate_and_scale(self):
@@ -196,6 +213,10 @@ class AlphaSpectrumAnalyser:
         5. Print the calibration parameters and the calibrated peak positions and FWHM for each detected peak for verification.
         """
         
+        self._require_fit()
+        assert self.popt is not None
+        popt = self.popt
+
         if self.num_peaks < 2:
             print(f"[{self.isotope_name}] Not enough Peaks for Calibration. Skipping...")
             self.calib_popt = (1.06e5, 2.527)  # Fallback calibration parameters
@@ -204,7 +225,7 @@ class AlphaSpectrumAnalyser:
             print(f"[{self.isotope_name}] Performing calibration to MeV...")
             
             # Extract fitted means (mu) for each peak
-            fitted_means = np.array([self.popt[i * 3 + 1] for i in range(self.num_peaks)])
+            fitted_means = np.array([popt[i * 3 + 1] for i in range(self.num_peaks)])
             
             # Linear fit to calibrate x-axis from AU to MeV
             def linear_func(x, a, b): return a * x + b
@@ -218,12 +239,14 @@ class AlphaSpectrumAnalyser:
         def linear_func(x, a, b): return a * x + b
         
         # Scale the fitted parameters to MeV for plotting and analysis
-        self.popt_mev = self.popt.copy()
+        assert self.calib_popt is not None
+        calib_popt = self.calib_popt
+        self.popt_mev = popt.copy()
         for i in range(self.num_peaks):
             idx = i * 3
             # Amplitudes (idx) blijven gelijk
-            self.popt_mev[idx + 1] = linear_func(self.popt[idx + 1], *self.calib_popt) # mu naar MeV
-            self.popt_mev[idx + 2] = self.popt[idx + 2] * self.calib_popt[0]             # sigma naar MeV
+            self.popt_mev[idx + 1] = linear_func(popt[idx + 1], *calib_popt) # mu naar MeV
+            self.popt_mev[idx + 2] = popt[idx + 2] * calib_popt[0]             # sigma naar MeV
             
             # Print statistics for each peak
             fwhm = 2.355 * self.popt_mev[idx + 2]
@@ -246,17 +269,27 @@ class AlphaSpectrumAnalyser:
         """
         os.makedirs(output_folder, exist_ok=True)
         # plt.figure(figsize=(8, 5.5), facecolor='#B8B8AA')
+
+        self._require_loaded()
+        self._require_calibration()
+        assert self.x is not None and self.counts is not None and self.sigma_counts is not None
+        assert self.calib_popt is not None and self.popt_mev is not None
+        x = self.x
+        counts = self.counts
+        sigma_counts = self.sigma_counts
+        calib_popt = self.calib_popt
+        popt_mev = self.popt_mev
         
         def linear_func(x, a, b): return a * x + b
             
-        calibrated_x = linear_func(self.x, *self.calib_popt)
+        calibrated_x = linear_func(x, *calib_popt)
         
         # 1. Plot energy spectrum
-        ax.plot(calibrated_x, self.counts, drawstyle="steps-mid", color='#9D593D', label='Data')
+        ax.plot(calibrated_x, counts, drawstyle="steps-mid", color='#9D593D', label='Data')
         
         # 2. Plot the total multi-Gauss fit in MeV
         x_fit_mev = np.linspace(calibrated_x[0], calibrated_x[-1], 1000)
-        y_fit_mev = self._multi_gaussian_model(x_fit_mev, *self.popt_mev)
+        y_fit_mev = self._multi_gaussian_model(x_fit_mev, *popt_mev)
         
         # Mask values below threshold for a cleaner plot
         y_fit_mev_masked = np.where(y_fit_mev > self.threshold, y_fit_mev, np.nan)
@@ -264,18 +297,18 @@ class AlphaSpectrumAnalyser:
         ax.plot(x_fit_mev, y_fit_mev_masked, color='#EFCD88', linewidth=1, linestyle='dotted', 
                 label=fr'Gaussian Fit', alpha=0.8)
         
-        ax.fill_between(calibrated_x, self.counts - 2 *self.sigma_counts, self.counts + 2 * self.sigma_counts, 
+        ax.fill_between(calibrated_x, counts - 2 *sigma_counts, counts + 2 * sigma_counts, 
                         color='#9D593D', alpha=0.5, step='mid', label=r'Error (95% CI)')
         
         # 3. Annotations
         for i in range(self.num_peaks):
-            mu_mev = self.popt_mev[i * 3 + 1]
+            mu_mev = popt_mev[i * 3 + 1]
             lit_e = self.lit_energies[i]
             
             ax.annotate(
                 f'{lit_e:.2f} MeV', 
                 xy=(mu_mev, 0),               
-                xytext=(mu_mev, 0.2 * np.max(self.counts) + i * 0.05 * np.max(self.counts)),         
+                xytext=(mu_mev, 0.2 * np.max(counts) + i * 0.05 * np.max(counts)),         
                 textcoords="data",
                 color='#BBC2C6', fontsize=9,          
                 ha='center', va='bottom', weight='bold',
@@ -285,7 +318,7 @@ class AlphaSpectrumAnalyser:
         # Axis formatting applied to the specific subplot axis
         ax.set_xlabel('Energy (MeV)', color='#BBC2C6', weight='bold', fontsize=12)
         ax.set_title(f'{self.isotope_name} Spectrum', color='#F5FDFF', weight='bold')
-        ax.set_ylim(0, max(self.counts) * 1.3)
+        ax.set_ylim(0, float(np.max(counts)) * 1.3)
 
 
     def run_full_analysis(self, ax):
@@ -355,7 +388,7 @@ if __name__ == "__main__":
         prop={'size': 12, 'weight': 'bold'}       # Changes the font properties
     )
     
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    plt.tight_layout(rect=(0, 0.05, 1, 1))
 
     os.makedirs("Figures", exist_ok=True)
     save_path = os.path.join("Figures", "Combined_Alpha_Spectra.png")

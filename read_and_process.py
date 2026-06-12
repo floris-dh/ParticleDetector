@@ -126,6 +126,10 @@ class AlphaPulseProcessor:
         self.clean_results_df = None
         self.integrals_df = None
 
+    def _require_clean_results(self):
+        if self.clean_results_df is None:
+            raise RuntimeError("No fitted pulse results are available. Run process_and_fit_pulses() first.")
+
     def load_and_chunk_data(self):
         """Laadt het ruwe oscilloscoopbestand en identificeert de afzonderlijke pulstraces."""
         print(f"[{self.isotope_name}] Loading and cleaning raw CSV data...")
@@ -270,15 +274,18 @@ class AlphaPulseProcessor:
     def compute_bounded_integrals(self):
         """Compute the analytical integral for the negative pulse."""
         print(f"[{self.isotope_name}] Computing negative pulse integrals...")
+        self._require_clean_results()
+        assert self.clean_results_df is not None
+        clean_results_df = self.clean_results_df
 
         # Parameters overhevelen naar NumPy arrays voor snelle iteratie
-        A = self.clean_results_df["A"].to_numpy()
-        B = self.clean_results_df["B"].to_numpy()
-        tau_1 = self.clean_results_df["tau_1"].to_numpy()
-        tau_2 = self.clean_results_df["tau_2"].to_numpy()
-        tau_3 = self.clean_results_df["tau_3"].to_numpy()
+        A = clean_results_df["A"].to_numpy()
+        B = clean_results_df["B"].to_numpy()
+        tau_1 = clean_results_df["tau_1"].to_numpy()
+        tau_2 = clean_results_df["tau_2"].to_numpy()
+        tau_3 = clean_results_df["tau_3"].to_numpy()
 
-        num_pulses = len(self.clean_results_df)
+        num_pulses = len(clean_results_df)
         dt_zero_arr = np.zeros(num_pulses)
 
         for i in range(num_pulses):
@@ -303,7 +310,7 @@ class AlphaPulseProcessor:
                 dt_zero_arr[i] = max_t
 
         # dt_zero toevoegen aan Polars en de wiskundige integraal uitrekenen
-        results_with_dt = self.clean_results_df.with_columns(
+        results_with_dt = clean_results_df.with_columns(
             pl.Series("dt_zero", dt_zero_arr)
         )
 
