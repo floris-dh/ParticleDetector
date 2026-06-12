@@ -1,0 +1,17 @@
+[workspace]
+authors = ["Floris den Hartog <floris.denhartog2308@gmail.com>"]
+channels = ["conda-forge"]
+name = "ParticleDetector"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+numpy = ">=2.4.6,<3"
+ipykernel = ">=7.3.0,<8"
+polars = ">=1.41.2,<2"
+scipy = ">=1.17.1,<2"
+matplotlib = ">=3.10.9,<4"
+ruff = ">=0.15.17,<0.16"

@@ -24,7 +24,7 @@ class AlphaSpectrumAnalyser:
         
         isotope_data = {"Am241": ([5.63782], (1e-5, 5.5e-5)),
                     "Pu239" : ([4.67826, 5.24451], (2.5e-5, 4.0e-5)),
-                    "Ra226": ([4.87062, 5.59031, 6.11468, 7.83346], (1.4e-5, 6.5e-5))}
+                    "Ra226": ([4.87062, 5.59031, 6.11468, 7.83346], (1.4e-5, 10e-5))}
         
         
         self.csv_path = csv_path
@@ -45,7 +45,7 @@ class AlphaSpectrumAnalyser:
         self.popt = None
         self.pcov = None
         self.chi2red = None
-        self.calib_popt = None  # [a, b] voor a*x + b
+        self.calib_popt = None  # [a, b] for a*x + b
         self.popt_mev = None
 
     def load_and_bin_data(self):
@@ -66,12 +66,12 @@ class AlphaSpectrumAnalyser:
         counts, bins = np.histogram(self.arbitrary_energy, bins=binsize, range=self.integral_range)
         
         # compute using moving average
-        self.counts, self.sigma_counts = self._moving_average(counts, window_size=4)
+        self.counts, self.sigma_counts = self._moving_average(counts, window_size=5)
         self.bins = bins
         self.x = (bins[:-1] + bins[1:]) / 2
         self.threshold = 0.2 * max(self.counts)
 
-    def _moving_average(self, data, window_size=5):
+    def _moving_average(self, data, window_size=3):
         """
         Function to apply a moving average to the histogram counts and compute the corresponding sigma for error bars.
         
@@ -149,6 +149,8 @@ class AlphaSpectrumAnalyser:
         
         # 3. CRITICAL: Sort left-to-right so peak index matching works chronologically
         peaks = np.sort(peaks)
+        
+        print(f"  Detected peaks at indices: {peaks} with energies (AU): {self.x[peaks]} and counts: {self.counts[peaks]}")
 
         # Build Dynamic initial guess and bounds based on detected peaks
         init_guess = []
@@ -227,7 +229,7 @@ class AlphaSpectrumAnalyser:
             fwhm = 2.355 * self.popt_mev[idx + 2]
             print(f"  Peak {i+1} ({self.lit_energies[i]} MeV ref) -> Calibrated: {self.popt_mev[idx+1]:.3f} MeV | FWHM: {fwhm:.3f} MeV")
 
-    def generate_plots(self, output_folder="Figures"):
+    def generate_plots(self, ax, output_folder="Figures"):
         """
         Function to generate a final plot of the calibrated energy spectrum with annotated peaks and save it as a PDF.
         
@@ -243,69 +245,57 @@ class AlphaSpectrumAnalyser:
         6. Add legends, grid, and title to the plot, and save it as a PDF file in the specified output folder with a filename that includes the isotope name and calibration status.
         """
         os.makedirs(output_folder, exist_ok=True)
-        plt.figure(figsize=(8, 5.5), facecolor='#B8B8AA')
+        # plt.figure(figsize=(8, 5.5), facecolor='#B8B8AA')
         
         def linear_func(x, a, b): return a * x + b
             
         calibrated_x = linear_func(self.x, *self.calib_popt)
         
-        # 1. Plot energiespectrum
-        plt.plot(calibrated_x, self.counts, drawstyle="steps-mid", color='black', label='Energy Spectrum Data')
+        # 1. Plot energy spectrum
+        ax.plot(calibrated_x, self.counts, drawstyle="steps-mid", color='#9D593D', label='Data')
         
-        # 2. Plot de totale multi-Gauss fit in MeV
+        # 2. Plot the total multi-Gauss fit in MeV
         x_fit_mev = np.linspace(calibrated_x[0], calibrated_x[-1], 1000)
         y_fit_mev = self._multi_gaussian_model(x_fit_mev, *self.popt_mev)
-        # Maskeer waarden onder de threshold voor een clean plotbeeld
+        
+        # Mask values below threshold for a cleaner plot
         y_fit_mev_masked = np.where(y_fit_mev > self.threshold, y_fit_mev, np.nan)
         
-        plt.plot(x_fit_mev, y_fit_mev_masked, color='red', linewidth=2, label=fr'Multi-Gaussian Fit ($\chi^2_{{red}}$ AU: {self.chi2red:.1e})', alpha=0.4)
-        plt.fill_between(calibrated_x, self.counts - self.sigma_counts, self.counts + self.sigma_counts, color='gray', alpha=0.3, step='mid', label='Error Bars (1$\sigma$)')
-        # 3. Annotaties en verticale indicatielijnen plaatsen
+        ax.plot(x_fit_mev, y_fit_mev_masked, color='#EFCD88', linewidth=1, linestyle='dotted', 
+                label=fr'Gaussian Fit', alpha=0.8)
+        
+        ax.fill_between(calibrated_x, self.counts - 2 *self.sigma_counts, self.counts + 2 * self.sigma_counts, 
+                        color='#9D593D', alpha=0.5, step='mid', label=r'Error (95% CI)')
+        
+        # 3. Annotations
         for i in range(self.num_peaks):
-            amp_mev = self.popt_mev[i * 3]
             mu_mev = self.popt_mev[i * 3 + 1]
             lit_e = self.lit_energies[i]
             
-            plt.annotate(
-                f'{lit_e:.1f} MeV', 
-                xy=(mu_mev, 0),               # Arrow tip points here (on the axis)
-                xytext=(mu_mev, 0.16 * np.max(self.counts)),         # Text and arrow base start here (Y=130)
-                textcoords="data",            # Use data coordinates for precise placement
-                ha='center',
-                va='bottom',                  # Sits text right above the arrow base
-                weight='bold',
-                arrowprops=dict(
-                    arrowstyle="->",          # Simple clean pointer
-                    color='#E0607E',          # Matching your pink style
-                    lw=2,                     # Line width
-                    shrinkA=5,                # Spacing between text and arrow base
-                    shrinkB=2                 # Spacing between arrow tip and axis line
-                )
+            ax.annotate(
+                f'{lit_e:.2f} MeV', 
+                xy=(mu_mev, 0),               
+                xytext=(mu_mev, 0.2 * np.max(self.counts) + i * 0.05 * np.max(self.counts)),         
+                textcoords="data",
+                color='#BBC2C6', fontsize=9,          
+                ha='center', va='bottom', weight='bold',
+                arrowprops=dict(arrowstyle="->", color='#7F8550', lw=1.5, shrinkA=3, shrinkB=2)
             )
 
-        # Grafiekopmaak
-        plt.xlabel('Energy (MeV)')
-        plt.ylabel('Counts')
-        plt.title(f'Calibrated Alpha Energy Spectrum - {self.isotope_name}')
-        plt.ylim(0, max(self.counts) * 1.2)
-        plt.xlim(min(calibrated_x), max(calibrated_x))
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        
-        save_path = os.path.join(output_folder, f"E_Spectrum_{self.isotope_name}_Calibrated.pdf")
-        plt.savefig(save_path)
-        print(f"[{self.isotope_name}] Plot successfully saved to '{save_path}'")
-        plt.show()
+        # Axis formatting applied to the specific subplot axis
+        ax.set_xlabel('Energy (MeV)', color='#BBC2C6', weight='bold', fontsize=12)
+        ax.set_title(f'{self.isotope_name} Spectrum', color='#F5FDFF', weight='bold')
+        ax.set_ylim(0, max(self.counts) * 1.3)
 
-    def run_full_analysis(self):
+
+    def run_full_analysis(self, ax):
         """
         Runs the full analysis pipeline for the alpha energy spectrum, including data loading, peak fitting, calibration, and plotting.
         """
         self.load_and_bin_data()
         self.fit_spectrum()
         self.calibrate_and_scale()
-        self.generate_plots()
+        self.generate_plots(ax)
 
 
 # =============================================================================
@@ -313,34 +303,65 @@ class AlphaSpectrumAnalyser:
 # =============================================================================
 if __name__ == "__main__":
     
-    target_source = "Ra226"  
-    cfg = r"Data\Ra226-290526-1\integrals.csv"
+    # Define your configuration dataset
+    datasets = [
+        {"source": "Am241", "path": r"Data\Am241-050626-1_output\pulse_integrals.csv"},
+        {"source": "Pu239", "path": r"Data\Pu239-050626-1_output\pulse_integrals.csv"},
+        {"source": "Ra226", "path": r"Data\Ra-080626-2_output\pulse_integrals.csv"} 
+    ]
     
-    analysis = AlphaSpectrumAnalyser(
-        csv_path=cfg,
-        isotope_name=target_source
+    num_plots = len(datasets)
+    
+    # Create a figure with N subplots in 1 row (change to nrows=num_plots for vertical stacking)
+    fig, axes = plt.subplots(nrows=1, ncols=num_plots, figsize=(6 * num_plots, 5), sharey=False, facecolor='#182731')
+    
+    
+    # Handle edge case if only 1 dataset is passed (so axes is iterable)
+    if num_plots == 1:
+        axes = [axes]
+        
+    # Process each isotope and plot onto its respective axis
+    for i, data in enumerate(datasets):
+        analysis = AlphaSpectrumAnalyser(
+            csv_path=data["path"],
+            isotope_name=data["source"]
+        )
+        # Pass the specific subplot axis to the analysis pipeline
+        analysis.run_full_analysis(ax=axes[i])
+    
+    # Final global adjustments and saving the consolidated figure
+    plt.suptitle("Calibrated Alpha Energy Spectra Comparison", fontsize=14, weight='bold', color="#F5FDFF")
+    
+    for i, ax in enumerate(axes):
+        if i == 0:
+            ax.set_ylabel('Counts', color='#BBC2C6', weight='bold', fontsize=12)
+        ax.grid(alpha=0.3, color='#BBC2C6', linestyle='--')
+        ax.set_xlim(3.5, 8.5)
+        ax.set_facecolor('#223441')
+        ax.tick_params(colors='#BBC2C6', which='both')  # Set tick colors for both major and minor ticks
+                
+    handles, labels = axes[0].get_legend_handles_labels()
+    
+    # 2. Add the legend to the overall figure layout
+    fig.legend(
+        handles, 
+        labels, 
+        loc='lower center',       # Positions it at the bottom middle
+        ncol=3,                   # Forces the items to sit side-by-side horizontally
+        bbox_to_anchor=(0.5, -0.05), # Fine-tunes positioning (X=center, Y=slightly below plots)
+        facecolor='inherit',
+        frameon=False,              # True or False depending on if you want a box border
+        labelcolor='#BBC2C6',                     # Changes the text color
+        prop={'size': 12, 'weight': 'bold'}       # Changes the font properties
     )
     
-    analysis.run_full_analysis()
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
 
-    target_source = "Pu239"  
-    cfg = r"Data\Pu239-050626-1_output\pulse_integrals.csv"
+    os.makedirs("Figures", exist_ok=True)
+    save_path = os.path.join("Figures", "Combined_Alpha_Spectra.png")
+    plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
+    print(f"\n[SUCCESS] Combined plot successfully saved to '{save_path}'")
     
-    analysis = AlphaSpectrumAnalyser(
-        csv_path=cfg,
-        isotope_name=target_source
-        )
-    
-    analysis.run_full_analysis()
-    
-    target_source = "Am241"  
-    cfg = r"Data\Am241-050626-1_output\pulse_integrals.csv"
-    
-    analysis = AlphaSpectrumAnalyser(
-        csv_path=cfg,
-        isotope_name=target_source
-        )
-    
-    analysis.run_full_analysis()
+    plt.show()
     
     

@@ -1,0 +1,12 @@
+gemeten met 2.0 mm aperture
+-50 mV Trigger
+100.000 pulsen verzameld
+met vernieuwde elektronica
+zonder insulerende tape
+discarded 29083
+
+Calibration parameters: a (slope) = 8.34e+04 MeV/AU, b (intercept) = 2.298 MeV
+  Peak 1 (4.87062 MeV ref) -> Calibrated: 4.851 MeV | FWHM: 0.609 MeV
+  Peak 2 (5.59031 MeV ref) -> Calibrated: 5.564 MeV | FWHM: 0.611 MeV
+  Peak 3 (6.11468 MeV ref) -> Calibrated: 6.187 MeV | FWHM: 0.448 MeV
+  Peak 4 (7.83346 MeV ref) -> Calibrated: 7.807 MeV | FWHM: 0.476 MeV
