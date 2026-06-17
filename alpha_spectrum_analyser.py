@@ -4,6 +4,7 @@ import polars as pl
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
+from pathlib import Path
 
 
 class AlphaSpectrumAnalyser:
@@ -345,7 +346,7 @@ class AlphaSpectrumAnalyser:
             color="#EFCD88",
             linewidth=1,
             linestyle="dotted",
-            label=rf"Gaussian Fit",
+            label="Gaussian Fit",
             alpha=0.8,
         )
 
@@ -402,13 +403,16 @@ if __name__ == "__main__":
     datasets = [
         {
             "source": "Am241",
-            "path": r"Data\Am241_Data\pulse_integrals.csv",
+            "path": Path("Data") / "Am241_Data" / "pulse_integrals.csv",
         },
         {
             "source": "Pu239",
-            "path": r"Data\Pu239_Data\pulse_integrals.csv",
+            "path": Path("Data") / "Pu239_Data" / "pulse_integrals.csv",
         },
-        {"source": "Ra226", "path": r"Data\Ra226_Data\pulse_integrals.csv"},
+        {
+            "source": "Ra226",
+            "path": Path("Data") / "Ra226_Data" / "pulse_integrals.csv",
+        },
     ]
 
     num_plots = len(datasets)
