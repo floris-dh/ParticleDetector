@@ -43,9 +43,11 @@ if filtered_integrals.height > 0:
 pulses = data.filter(pl.col("chunk_id").is_in(ids))
 
 # 5. Plotting setup
-fig, ax = plt.subplots(figsize=(8, 5), facecolor="#182731")
+fig, ax = plt.subplots(figsize=(9, 9), facecolor="#182731")
 
 t = np.linspace(-0.00013, 0.001, 1000)
+
+pulses_list = []
 
 for i, row in enumerate(pulses.rows(named=True)):
     t0, A, tau_1, tau_2, B, tau_3, C = (
@@ -68,47 +70,18 @@ for i, row in enumerate(pulses.rows(named=True)):
     ax.plot(
         t - t0,
         np.where(fitted_curve <= C_THRESHOLD, fitted_curve, np.nan),
-        color="#EFCD88",
         alpha=0.8,
         label=label,
     )
 
 ax.axhline(-0.05, label="Trigger (-50 mV)", color="#7F8550", linestyle="--", alpha=0.8)
 
-ax.annotate(
-    text="Pulse from Po214",
-    xy=(0.0004, -0.145),
-    textcoords="data",
-    color="#BBC2C6",
-    fontsize=9,
-    ha="center",
-    va="bottom",
-    weight="bold",
-)
-
-handles, labels = ax.get_legend_handles_labels()
-
-fig.legend(
-    handles,
-    labels,
-    loc="lower center",  # Positions it at the bottom middle
-    ncol=3,  # Forces the items to sit side-by-side horizontally
-    bbox_to_anchor=(
-        0.5,
-        -0.05,
-    ),  # Fine-tunes positioning (X=center, Y=slightly below plots)
-    facecolor="inherit",
-    frameon=False,  # True or False depending on if you want a box border
-    labelcolor="#BBC2C6",  # Changes the text color
-    prop={"size": 12, "weight": "bold"},  # Changes the font properties
-)
-
-plt.suptitle("Pulses collected from Ra226", fontsize=14, weight="bold", color="#F5FDFF")
+plt.suptitle("Pulses collected from Ra226", fontsize=20, weight="bold", color="#F5FDFF")
 ax.axhline(0, color="#BBC2C6", linestyle="--", alpha=0.5)
-ax.set_xlabel("Time (s)", color="#BBC2C6", weight="bold", fontsize=12)
-ax.set_ylabel("Voltage (V)", color="#BBC2C6", weight="bold", fontsize=12)
+ax.set_xlabel("Time (s)", color="#BBC2C6", weight="bold", fontsize=16)
+ax.set_ylabel("Voltage (V)", color="#BBC2C6", weight="bold", fontsize=16)
 ax.grid(alpha=0.3, color="#BBC2C6", linestyle="--")
 ax.set_facecolor("#223441")
 ax.tick_params(colors="#BBC2C6", which="both")
-plt.savefig(r"Figures\informative_pulses.png", dpi=300, bbox_inches="tight")
+plt.savefig(r"Figures\informative_pulses.png", dpi=300,transparent=True)
 plt.show()

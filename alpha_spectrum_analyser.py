@@ -367,21 +367,21 @@ class AlphaSpectrumAnalyser:
             ax.annotate(
                 f"{lit_e:.2f} MeV",
                 xy=(mu_mev, 0),
-                xytext=(mu_mev, 0.2 * np.max(counts) + i * 0.05 * np.max(counts)),
+                xytext=(mu_mev, 0.2 * np.max(counts) + (i % 2) * 0.1 * np.max(counts)),
                 textcoords="data",
                 color="#BBC2C6",
-                fontsize=9,
+                fontsize=16,
                 ha="center",
                 va="bottom",
                 weight="bold",
                 arrowprops=dict(
-                    arrowstyle="->", color="#7F8550", lw=1.5, shrinkA=3, shrinkB=2
+                    arrowstyle="->", color="#7F8550", lw=4, shrinkA=3, shrinkB=2
                 ),
             )
 
         # Axis formatting applied to the specific subplot axis
-        ax.set_xlabel("Energy (MeV)", color="#BBC2C6", weight="bold", fontsize=12)
-        ax.set_title(f"{self.isotope_name} Spectrum", color="#F5FDFF", weight="bold")
+        ax.set_xlabel("Energy (MeV)", color="#BBC2C6", weight="bold", fontsize=16)
+        ax.set_title(f"{self.isotope_name}", color="#F5FDFF", weight="bold", fontsize=18)
         ax.set_ylim(0, float(np.max(counts)) * 1.3)
 
     def run_full_analysis(self, ax):
@@ -437,14 +437,14 @@ if __name__ == "__main__":
     # Final global adjustments and saving the consolidated figure
     plt.suptitle(
         "Calibrated Alpha Energy Spectra Comparison",
-        fontsize=14,
+        fontsize=20,
         weight="bold",
         color="#F5FDFF",
     )
 
     for i, ax in enumerate(axes):
         if i == 0:
-            ax.set_ylabel("Counts", color="#BBC2C6", weight="bold", fontsize=12)
+            ax.set_ylabel("Counts", color="#BBC2C6", weight="bold", fontsize=16)
         ax.grid(alpha=0.3, color="#BBC2C6", linestyle="--")
         ax.set_xlim(3.5, 8.5)
         ax.set_facecolor("#223441")
@@ -467,14 +467,14 @@ if __name__ == "__main__":
         facecolor="inherit",
         frameon=False,  # True or False depending on if you want a box border
         labelcolor="#BBC2C6",  # Changes the text color
-        prop={"size": 12, "weight": "bold"},  # Changes the font properties
+        prop={"size": 16, "weight": "bold"},  # Changes the font properties
     )
 
     plt.tight_layout(rect=(0, 0.05, 1, 1))
 
     os.makedirs("Figures", exist_ok=True)
     save_path = os.path.join("Figures", "Combined_Alpha_Spectra.png")
-    plt.savefig(save_path, dpi=300, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.savefig(save_path, dpi=300, bbox_inches="tight", transparent=True)
     print(f"\n[SUCCESS] Combined plot successfully saved to '{save_path}'")
 
     plt.show()

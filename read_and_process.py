@@ -356,21 +356,24 @@ class AlphaPulseProcessor:
 # =============================================================================
 if __name__ == "__main__":
     # Configuratie-instellingen per isotoop-bestand
+    
+    plotsize = 10
+    
     config = {
         "Am241": {
             "csv": r"Data\Am241-100626-1.csv",
             "output": r"Data\Am241-050626-1_output",
-            "plots": 100,
+            "plots": plotsize,
         },
         "Pu239": {
             "csv": r"Data\Pu239-050626-1.csv",
             "output": r"Data\Pu239-050626-1_output",
-            "plots": 10,
+            "plots": plotsize,
         },
         "Ra226": {
             "csv": r"D:\Ra-080626-1.csv",
             "output": r"Data\Ra-080626-1_output",
-            "plots": 100,
+            "plots": plotsize,
         },
     }
 
